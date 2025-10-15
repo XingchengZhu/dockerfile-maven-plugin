@@ -15,6 +15,7 @@
     <java.version>17</java.version>
     <spring-boot.version>2.7.18</spring-boot.version>
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <dependencyManagement>
@@ -34,7 +35,6 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
@@ -44,6 +44,25 @@
 
   <build>
     <plugins>
+      <!-- Jib: 直接构建并推送镜像（HTTP 私库已放开） -->
+      <plugin>
+        <groupId>com.google.cloud.tools</groupId>
+        <artifactId>jib-maven-plugin</artifactId>
+        <version>3.4.2</version>
+        <configuration>
+          <to>
+            <!-- 仅占位，流水线用 -Djib.to.image 覆盖 -->
+            <image>10.29.230.150:31381/library/testrepo:local</image>
+          </to>
+          <allowInsecureRegistries>true</allowInsecureRegistries>
+          <container>
+            <ports>
+              <port>8080</port>
+            </ports>
+          </container>
+        </configuration>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
