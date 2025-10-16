@@ -1,0 +1,7 @@
+.git
+.target
+node_modules
+.idea
+.vscode
+*.iml
+.DS_Store
