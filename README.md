@@ -1,284 +1,133 @@
-# 单阶段 Maven 流水线（Podman + Rocky 9.6 + Java 8）使用说明
+ 单阶段 Maven + Jib 流水线（私有仓库 / HTTP）
 
-本仓库示例展示了**不依赖 Docker 守护进程**、仅用 **Podman + 单阶段 Dockerfile** 来构建并运行一个 Spring Boot（Java 8）应用镜像的完整流程，同时兼容 Jenkins 的**测试报告收集**。
+本项目使用 **Maven + Jib** 在 **无需 Docker/Podman 守护进程** 的情况下，直接从源码构建并**推送容器镜像**到私有仓库。
+
+> * **无需 Dockerfile**：Jib 会自动分层打包 `dependencies/classes/resources`。
+> * **支持 HTTP 私库**：通过 `-Djib.allowInsecureRegistries=true -DsendCredentialsOverHttp=true`。
+> * **可收集测试报告**：先在宿主机跑 `mvn test`，再执行 Jib 构建。
 
 ---
 
 ## 目录
 
-* [环境前置](#环境前置)
-* [关键命令一览](#关键命令一览)
-* [测试报告收集配置](#测试报告收集配置)
-* [镜像构建与推送（Podman）](#镜像构建与推送podman)
-* [Dockerfile（单阶段，JDK 1.8）](#dockerfile单阶段jdk-18)
-* [pom.xml（Java 8）](#pomxmljava-8)
-* [本地运行容器](#本地运行容器)
-* [Jenkins Pipeline 参考](#jenkins-pipeline-参考)
+* [前置条件](#前置条件)
+* [流水线命令（推荐：先测后构建）](#流水线命令推荐先测后构建)
+* [POM 约定](#pom-约定)
+* [镜像运行验证](#镜像运行验证)
 * [常见问题排查](#常见问题排查)
-* [可选：如何切换为多阶段以瘦身镜像](#可选如何切换为多阶段以瘦身镜像)
+* [可选参数速查](#可选参数速查)
 
 ---
 
-## 环境前置
+## 前置条件
 
-* 构建机已安装：
-
-  * **Podman**（支持 `--tls-verify=false` 与 HTTP/不安全私有仓库）
-  * **Maven 3.6+**
-  * 访问私有镜像仓库：`10.29.230.150:31381`
-* 网络策略允许访问你指定的 Maven 中央仓库或公司 Nexus（如需）。
+* Maven 已安装并可访问公网或内部 Maven 仓库（首次构建会下载依赖）。
+* 目标与基础镜像仓库：`10.29.230.150:31381`（HTTP 私库）。
+* 账户：`admin / Admin123`。
+* 代码使用 **Java 8**（pom 已设定 `<java.version>1.8</java.version>`）。
 
 ---
 
-## 关键命令一览
+## 流水线命令（推荐：先测后构建）
 
-### 1）编译并运行测试
-
-（Jenkins 中建议使用，失败继续：`-Dmaven.test.failure.ignore=true`）
+### 1) 运行单元测试并生成报告（失败不阻断）
 
 ```bash
 mvn -B -U -fae -DskipTests=false -Dmaven.test.failure.ignore=true clean test
 ```
 
-### 2）测试报告收集的匹配模式（Jenkins `junit`）
+Jenkins 测试报告收集路径：
 
 ```
 **/target/surefire-reports/*.xml, **/target/failsafe-reports/*.xml
 ```
 
-### 3）登录私有仓库、构建并推送镜像（Podman）
+### 2) 使用 Jib 构建并推送镜像
 
 ```bash
-podman login --tls-verify=false 10.29.230.150:31381 -u admin -p Admin123
-podman build --tls-verify=false -t 10.29.230.150:31381/library/testrepo:podman .
-podman push  --tls-verify=false 10.29.230.150:31381/library/testrepo:podman
+mvn -B -U -DskipTests=true \
+  -Djib.from.image=10.29.230.150:31381/library/eclipse-temurin:8-jre \
+  -Djib.from.auth.username=admin -Djib.from.auth.password=Admin123 \
+  -Djib.to.image=10.29.230.150:31381/library/testrepo:test \
+  -Djib.to.auth.username=admin -Djib.to.auth.password=Admin123 \
+  -Djib.allowInsecureRegistries=true \
+  -DsendCredentialsOverHttp=true \
+  clean package jib:build
 ```
 
----
-
-## 测试报告收集配置
-
-* **Surefire**（单元测试）默认在 `target/surefire-reports/` 生成 `TEST-*.xml`
-* **Failsafe**（集成测试，若使用）默认在 `target/failsafe-reports/` 生成 `*.xml`
-
-在 Jenkins 的 `junit` 步骤填写：
-
-```
-**/target/surefire-reports/*.xml, **/target/failsafe-reports/*.xml
-```
-
-> 如果报告未被发现，请确认：
+> 说明
 >
-> * 流水线先执行了 `mvn test`
-> * 报告路径是否被误写或被清理
+> * `jib.from.image`：基础运行时镜像（这里用 Java 8 JRE）。也可以换成你私库里的其它基础镜像。
+> * `jib.to.image`：目标镜像（项目镜像）推送到私库。
+> * `allowInsecureRegistries + sendCredentialsOverHttp`：允许 HTTP 并在 HTTP 下发送凭据（仅限可信内网）。
+> * 已在 `pom.xml` 内配置 `jib-maven-plugin`，此处命令行参数会覆盖 `<configuration>` 占位值。
 
 ---
 
-## 镜像构建与推送（Podman）
+## POM 约定
 
-1. 登录私有仓库（HTTP/自签名时使用 `--tls-verify=false`）
-2. 直接在源码根目录执行 `podman build`
-3. 推送到对应的命名空间/仓库/标签
+* POM 已设定：
 
-> **注意**：本示例 Dockerfile 是**单阶段**，镜像较大但流程最简单。如果在意镜像体积，见文末多阶段示例思路。
+  * Java 8 编译目标：`maven-compiler-plugin` (`source/target=1.8`)
+  * Spring Boot 2.7.x
+  * `maven-surefire-plugin` 生成测试报告
+  * `jib-maven-plugin`（内含占位 `from/to`，以命令行覆盖）
 
----
-
-## Dockerfile（单阶段，JDK 1.8）
-
-将以下文件保存为项目根目录的 `Dockerfile`：
-
-```dockerfile
-# 单阶段：构建 + 运行都在同一个镜像里（简单但体积较大）
-FROM 10.29.230.150:31381/library/m.daocloud.io/docker.io/rockylinux/rockylinux:9.6.20250531
-
-# 基础工具 + OpenJDK 1.8 + Maven
-RUN dnf clean all && \
-    dnf -y --nobest --allowerasing update && \
-    dnf -y --nobest --allowerasing install \
-      java-1.8.0-openjdk-devel maven tzdata git which tar gzip && \
-    dnf clean all
-
-# 时区
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-WORKDIR /app
-
-# 先拷 POM 利用依赖缓存
-COPY pom.xml ./
-RUN mvn -B -U -q -DskipTests=true dependency:go-offline
-
-# 再拷源码并打包
-COPY src ./src
-RUN mvn -B -U -DskipTests=true clean package
-
-EXPOSE 8080
-
-# 直接运行 target 产物；用 sh -c 允许通配符匹配 jar 名
-ENTRYPOINT ["sh","-c","exec java -jar /app/target/*.jar"]
-```
-
-**要点：**
-
-* 使用你本地私库的 Rocky 9.6 基础镜像
-* `dependency:go-offline` 尽量缓存依赖，加速后续构建
-* 以 Java 8 编译并运行（与 `pom.xml` 一致）
+> 如需改端口，在 `pom.xml` 里 Jib 的 `<container><ports><port>8080</port></ports></container>` 或命令行覆盖：
+> `-Djib.container.ports=8080`
 
 ---
 
-## pom.xml（Java 8）
+## 镜像运行验证
 
-将以下内容保存为 `pom.xml`（或合并至现有 POM）：
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-
-  <groupId>com.example</groupId>
-  <artifactId>demo-jib</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
-  <packaging>jar</packaging>
-  <name>demo-jib</name>
-  <description>Demo app built with Maven (Java 8)</description>
-
-  <properties>
-    <java.version>1.8</java.version>
-    <spring-boot.version>2.7.18</spring-boot.version>
-    <maven-compiler-plugin.version>3.10.1</maven-compiler-plugin.version>
-    <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
-
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-dependencies</artifactId>
-        <version>${spring-boot.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
-
-  <dependencies>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-web</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-  </dependencies>
-
-  <build>
-    <plugins>
-      <!-- Java 8 编译目标 -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>${maven-compiler-plugin.version}</version>
-        <configuration>
-          <source>${java.version}</source>
-          <target>${java.version}</target>
-          <encoding>${project.build.sourceEncoding}</encoding>
-        </configuration>
-      </plugin>
-
-      <!-- 单元测试（Jenkins 收集 surefire 报告用） -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <version>${maven-surefire-plugin.version}</version>
-        <configuration>
-          <failIfNoTests>false</failIfNoTests>
-        </configuration>
-      </plugin>
-
-      <!-- Spring Boot 打包插件 -->
-      <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-        <version>${spring-boot.version}</version>
-        <executions>
-          <execution>
-            <goals><goal>repackage</goal></goals>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
-</project>
-```
-
----
-
-## 本地运行容器
+构建成功后可在任意有容器引擎的机器上验证：
 
 ```bash
-podman run --rm -p 8080:8080 10.29.230.150:31381/library/testrepo:podman
-# 访问 http://localhost:8080
-```
-
-如应用使用了自定义端口，请在 `application.properties` 或 Dockerfile 中同步调整。
-
----
-
-## Jenkins Pipeline 参考
-
-```groovy
-pipeline {
-  agent any
-  stages {
-    stage('Test') {
-      steps {
-        sh 'mvn -B -U -fae -DskipTests=false -Dmaven.test.failure.ignore=true clean test'
-      }
-      post {
-        always {
-          junit '**/target/surefire-reports/*.xml, **/target/failsafe-reports/*.xml'
-        }
-      }
-    }
-    stage('Build & Push Image') {
-      steps {
-        sh '''
-          podman login --tls-verify=false 10.29.230.150:31381 -u admin -p Admin123
-          podman build --tls-verify=false -t 10.29.230.150:31381/library/testrepo:podman .
-          podman push  --tls-verify=false 10.29.230.150:31381/library/testrepo:podman
-        '''
-      }
-    }
-  }
-}
+# Podman（或 Docker）均可
+podman run --rm -p 8080:8080 10.29.230.150:31381/library/testrepo:test
+# 访问：http://<宿主机IP>:8080/
 ```
 
 ---
 
 ## 常见问题排查
 
-* **Jenkins 显示 “No test report files were found”**
+1. **报错 `Network is unreachable (connect failed)` 访问 `registry-1.docker.io`**
 
-  * 确认 `mvn test` 已执行
-  * 确认 `junit` 的通配写法：`**/target/surefire-reports/*.xml`
-  * 在同一节点/容器内打印 `pwd` 和 `find` 验证路径
-* **连接私库报 TLS 错误/HTTP 响应给 HTTPS 客户端**
+   * 通常是基础镜像在 DockerHub，但你的环境无法直连公网。
+   * 解决：把基础镜像也**预拉到私库**，用 `-Djib.from.image=<你的私库镜像>`（本 README 已使用私库 `eclipse-temurin:8-jre`）。
 
-  * 使用 `--tls-verify=false`（Podman 构建/推送都加）
-  * 或配置守护进程/registry 为可信（企业环境按安全规范）
-* **Jar 名称不一致导致容器启动失败**
+2. **报错 “Required credentials … were not sent because the connection was over HTTP”**
 
-  * 当前 Entrypoint 使用通配符 `/app/target/*.jar`；如需固定，建议在 `pom.xml` 中设置 `<finalName>` 并同步 Dockerfile
-* **Java 版本冲突**
+   * 需要同时启用：
 
-  * Dockerfile 使用 **java-1.8.0-openjdk-devel**；`pom.xml` 也使用 `1.8`。两者需一致
-* **镜像过大**
+     * `-Djib.allowInsecureRegistries=true`
+     * `-DsendCredentialsOverHttp=true`
 
-  * 单阶段最简单但镜像体积较大，可参考多阶段思路
+3. **认证失败**
+
+   * 检查用户名/密码是否正确；也可在 `~/.m2/settings.xml` 配置 `<servers>`，用 `-Djib.to.auth.username` / `-Djib.to.auth.password` 覆盖。
+
+4. **端口不通 / 服务未启动**
+
+   * 检查应用是否监听 `8080`（或在 Jib 配置中修改端口），并确认运行命令的端口映射。
+
+5. **需要固定标签**
+
+   * 追加：`-Djib.to.tags=latest,build-20251016`
+
+---
+
+## 可选参数速查
+
+* 允许 HTTP 私库：
+  `-Djib.allowInsecureRegistries=true -DsendCredentialsOverHttp=true`
+* 指定基础镜像与凭据：
+  `-Djib.from.image=<REG>/<REPO>:<TAG> -Djib.from.auth.username=... -Djib.from.auth.password=...`
+* 指定目标镜像与凭据：
+  `-Djib.to.image=<REG>/<REPO>:<TAG> -Djib.to.auth.username=... -Djib.to.auth.password=...`
+* 额外标签：
+  `-Djib.to.tags=latest,dev`
+* 运行端口：
+  `-Djib.container.ports=8080`
+
