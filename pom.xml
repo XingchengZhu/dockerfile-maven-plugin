@@ -12,8 +12,7 @@
   <description>Demo app built with Maven</description>
 
   <properties>
-    <!-- 将 Java 版本降到与构建机一致（常见是 1.8 或 11）。这里先用 1.8。 -->
-    <java.version>1.8</java.version>
+    <java.version>17</java.version>
     <spring-boot.version>2.7.18</spring-boot.version>
     <maven-compiler-plugin.version>3.10.1</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
@@ -46,30 +45,10 @@
   </dependencies>
 
   <build>
-    <plugins>
-      <!-- Jib：不需要 Docker/Podman，直接构建并推送镜像；允许 HTTP 私库 -->
-      <plugin>
-        <groupId>com.google.cloud.tools</groupId>
-        <artifactId>jib-maven-plugin</artifactId>
-        <version>3.4.2</version>
-        <configuration>
-          <!-- 可选：指定 Java 8 运行时基础镜像；也可删掉由 Jib 自动选择 -->
-          <from>
-            <image>eclipse-temurin:8-jre</image>
-          </from>
-          <to>
-            <!-- 占位，流水线用 -Djib.to.image 覆盖 -->
-            <image>10.29.230.150:31381/library/testrepo:local</image>
-          </to>
-          <allowInsecureRegistries>true</allowInsecureRegistries>
-          <container>
-            <ports>
-              <port>8080</port>
-            </ports>
-          </container>
-        </configuration>
-      </plugin>
+    <!-- 固定打包产物名为 app.jar，方便 Dockerfile 拷贝 -->
+    <finalName>app</finalName>
 
+    <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
