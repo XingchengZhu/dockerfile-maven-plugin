@@ -25,7 +25,7 @@
 
   * **Podman**（支持 `--tls-verify=false` 与 HTTP/不安全私有仓库）
   * **Maven 3.6+**
-  * 访问私有镜像仓库：`ip:port`
+  * 访问私有镜像仓库：`10.29.230.150:31381`
 * 网络策略允许访问你指定的 Maven 中央仓库或公司 Nexus（如需）。
 
 ---
@@ -49,9 +49,9 @@ mvn -B -U -fae -DskipTests=false -Dmaven.test.failure.ignore=true clean test
 ### 3）登录私有仓库、构建并推送镜像（Podman）
 
 ```bash
-podman login --tls-verify=false ip:port -u admin -p Admin123
-podman build --tls-verify=false -t ip:port/library/testrepo:podman .
-podman push  --tls-verify=false ip:port/library/testrepo:podman
+podman login --tls-verify=false 10.29.230.150:31381 -u admin -p Admin123
+podman build --tls-verify=false -t 10.29.230.150:31381/library/testrepo:podman .
+podman push  --tls-verify=false 10.29.230.150:31381/library/testrepo:podman
 ```
 
 ---
@@ -90,7 +90,7 @@ podman push  --tls-verify=false ip:port/library/testrepo:podman
 
 ```dockerfile
 # 单阶段：构建 + 运行都在同一个镜像里（简单但体积较大）
-FROM ip:port/library/m.daocloud.io/docker.io/rockylinux/rockylinux:9.6.20250531
+FROM 10.29.230.150:31381/library/m.daocloud.io/docker.io/rockylinux/rockylinux:9.6.20250531
 
 # 基础工具 + OpenJDK 1.8 + Maven
 RUN dnf clean all && \
@@ -223,7 +223,7 @@ ENTRYPOINT ["sh","-c","exec java -jar /app/target/*.jar"]
 ## 本地运行容器
 
 ```bash
-podman run --rm -p 8080:8080 ip:port/library/testrepo:podman
+podman run --rm -p 8080:8080 10.29.230.150:31381/library/testrepo:podman
 # 访问 http://localhost:8080
 ```
 
@@ -250,9 +250,9 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-          podman login --tls-verify=false ip:port -u admin -p Admin123
-          podman build --tls-verify=false -t ip:port/library/testrepo:podman .
-          podman push  --tls-verify=false ip:port/library/testrepo:podman
+          podman login --tls-verify=false 10.29.230.150:31381 -u admin -p Admin123
+          podman build --tls-verify=false -t 10.29.230.150:31381/library/testrepo:podman .
+          podman push  --tls-verify=false 10.29.230.150:31381/library/testrepo:podman
         '''
       }
     }
