@@ -1,5 +1,5 @@
 # ====== Build Stage ======
-FROM rockylinux/rockylinux:9.6.20250531 AS builder
+FROM 10.29.230.150:31381/library/m.daocloud.io/docker.io/rockylinux/rockylinux:9.6.20250531 AS builder
 
 # 基础工具 + OpenJDK 17 + Maven
 RUN dnf clean all && \
@@ -26,7 +26,7 @@ RUN mvn -B -U -DskipTests=true clean package
 
 
 # ====== Runtime Stage ======
-FROM rockylinux/rockylinux:9.6.20250531
+FROM 10.29.230.150:31381/library/m.daocloud.io/docker.io/rockylinux/rockylinux:9.6.20250531
 
 # 仅安装运行所需的 JRE（headless 更轻）
 RUN dnf clean all && \
