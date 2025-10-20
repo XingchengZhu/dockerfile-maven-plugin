@@ -47,28 +47,37 @@
 
   <build>
     <plugins>
-      <!-- Jib：不需要 Docker/Podman，直接构建并推送镜像；允许 HTTP 私库 -->
-      <plugin>
-        <groupId>com.google.cloud.tools</groupId>
-        <artifactId>jib-maven-plugin</artifactId>
-        <version>3.4.2</version>
-        <configuration>
-          <!-- 可选：指定 Java 8 运行时基础镜像；也可删掉由 Jib 自动选择 -->
-          <from>
-            <image>eclipse-temurin:8-jre</image>
-          </from>
-          <to>
-            <!-- 占位，流水线用 -Djib.to.image 覆盖 -->
-            <image>10.29.230.150:31381/library/testrepo:local</image>
-          </to>
-          <allowInsecureRegistries>true</allowInsecureRegistries>
-          <container>
-            <ports>
-              <port>8080</port>
-            </ports>
-          </container>
-        </configuration>
-      </plugin>
+               <plugin>
+           <groupId>com.spotify</groupId>
+           <artifactId>dockerfile-maven-plugin</artifactId>
+           <version>1.4.13</version>
+           <executions>
+             <execution>
+               <id>docker-build</id>
+               <goals>
+                 <goal>build</goal>
+               </goals>
+               <phase>package</phase>
+             </execution>
+             <execution>
+               <id>docker-push</id>
+               <goals>
+                 <goal>push</goal>
+               </goals>
+               <phase>none</phase>
+             </execution>
+           </executions>
+           <configuration>
+             <repository>10.29.230.150:31381/library/testrepo</repository>
+             <tag>test</tag>
+         
+             <buildArgs>
+               <JAR_FILE>${project.build.directory}/${project.build.finalName}.jar</JAR_FILE>
+             </buildArgs>
+             <skipDockerInfo>true</skipDockerInfo>
+           </configuration>
+         </plugin>
+
 
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
