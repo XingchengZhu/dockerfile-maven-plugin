@@ -46,39 +46,47 @@
   </dependencies>
 
   <build>
-    <plugins>
-               <plugin>
-           <groupId>com.spotify</groupId>
-           <artifactId>dockerfile-maven-plugin</artifactId>
-           <version>1.4.13</version>
-           <executions>
-             <execution>
-               <id>docker-build</id>
-               <goals>
-                 <goal>build</goal>
-               </goals>
-               <phase>package</phase>
-             </execution>
-             <execution>
-               <id>docker-push</id>
-               <goals>
-                 <goal>push</goal>
-               </goals>
-               <phase>none</phase>
-             </execution>
-           </executions>
-           <configuration>
-             <repository>10.29.230.150:31381/library/testrepo</repository>
-             <tag>test</tag>
-         
-             <buildArgs>
-               <JAR_FILE>${project.build.directory}/${project.build.finalName}.jar</JAR_FILE>
-             </buildArgs>
-             <skipDockerInfo>true</skipDockerInfo>
-           </configuration>
-         </plugin>
+      <plugins>
 
+      <!-- 1) Dockerfile 插件 -->
+      <plugin>
+        <groupId>com.spotify</groupId>
+        <artifactId>dockerfile-maven-plugin</artifactId>
+        <version>1.4.13</version>
+        <executions>
+          <!-- 只把 build 绑定到 package；push 不绑定（命令行显式调用） -->
+          <execution>
+            <id>docker-build</id>
+            <goals><goal>build</goal></goals>
+            <phase>package</phase>
+          </execution>
+        </executions>
+        <configuration>
+          <repository>10.29.230.150:31381/library/testrepo</repository>
+          <tag>test</tag>
+          <buildArgs>
+            <JAR_FILE>${project.build.directory}/${project.build.finalName}.jar</JAR_FILE>
+          </buildArgs>
+          <skipDockerInfo>true</skipDockerInfo>
+        </configuration>
+      </plugin>
 
+      <!-- 2) 绑定 spring-boot:repackage，产出可执行（fat）JAR -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+            <phase>package</phase>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- 其余保持不变 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -96,12 +104,6 @@
         <configuration>
           <failIfNoTests>false</failIfNoTests>
         </configuration>
-      </plugin>
-
-      <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-        <version>${spring-boot.version}</version>
       </plugin>
     </plugins>
   </build>
